@@ -32,6 +32,7 @@ package com.raywenderlich.android.combinestagram
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import android.widget.ImageView
@@ -39,22 +40,26 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import io.reactivex.Single
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.subjects.BehaviorSubject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 
 
 class SharedViewModel : ViewModel() {
 
   private val selectedPhotos = MutableLiveData<List<Photo>>()
 
+  private val thumbnailStatus = MutableLiveData<ThumbnailStatus>()
+
   private val subscriptions = CompositeDisposable()
 
   private val imagesSubject: BehaviorSubject<MutableList<Photo>>
-      = BehaviorSubject.createDefault<MutableList<Photo>>(mutableListOf())
+          = BehaviorSubject.createDefault<MutableList<Photo>>(mutableListOf())
 
   init {
     subscriptions.add(imagesSubject.subscribe {
@@ -71,15 +76,40 @@ class SharedViewModel : ViewModel() {
     return selectedPhotos
   }
 
+  fun getThumbnailStatus(): LiveData<ThumbnailStatus> {
+    return thumbnailStatus
+  }
+
   fun subscribeSelectedPhotos(fragment: PhotosBottomDialogFragment) {
-    subscriptions.add(fragment.selectedPhotos
-        .doOnComplete {
-          Log.v("SharedViewModel", "Completed selecting photos")
-        }
-        .subscribe { photo ->
-          imagesSubject.value?.add(photo)
-          imagesSubject.onNext(imagesSubject.value ?: mutableListOf())
-        })
+
+    val newPhotos = fragment.selectedPhotos.share()
+
+    subscriptions.add(newPhotos
+            .doOnComplete {
+              Log.v("SharedViewModel", "Completed selecting photos")
+            }
+            .takeWhile {
+              imagesSubject.value?.size ?: 0 < 6
+            }
+            .filter { newImage ->
+              val bitmap = BitmapFactory.decodeResource(fragment.resources, newImage.drawable)
+              bitmap.width > bitmap.height
+            }
+            .filter { newImage ->
+              val photos = imagesSubject.value ?: mutableListOf()
+              !(photos.map { it.drawable }.contains(newImage.drawable))
+            }
+            .debounce(250, TimeUnit.MILLISECONDS, AndroidSchedulers.mainThread())
+            .subscribe { photo ->
+              imagesSubject.value?.add(photo)
+              imagesSubject.onNext(imagesSubject.value ?: mutableListOf())
+            })
+
+    subscriptions.add(newPhotos
+            .ignoreElements()
+            .subscribe {
+              thumbnailStatus.postValue(ThumbnailStatus.READY)
+            })
   }
 
   fun clearPhotos() {

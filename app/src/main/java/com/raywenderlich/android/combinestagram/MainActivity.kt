@@ -80,10 +80,15 @@ class MainActivity : AppCompatActivity() {
         }
       }
     })
+
+    viewModel.getThumbnailStatus().observe(this, Observer { status ->
+      if (status == ThumbnailStatus.READY) {
+        thumbnail.setImageDrawable(collageImage.drawable)
+      }
+    })
   }
 
   private fun actionAdd() {
-//    viewModel.addPhoto(PhotoStore.photos[0])
     val addPhotoBottomDialogFragment = PhotosBottomDialogFragment.newInstance()
     addPhotoBottomDialogFragment.show(supportFragmentManager, "PhotosBottomDialogFragment")
     viewModel.subscribeSelectedPhotos(addPhotoBottomDialogFragment)
@@ -98,18 +103,18 @@ class MainActivity : AppCompatActivity() {
   private fun actionSave() {
     progressBar.visibility = View.VISIBLE
     viewModel.saveBitmapFromImageView(collageImage, this)
-        .subscribeOn(Schedulers.io())
-        .observeOn(AndroidSchedulers.mainThread())
-        .subscribeBy(
-            onSuccess = { file ->
-              Toast.makeText(this, "$file saved", Toast.LENGTH_SHORT).show()
-              progressBar.visibility = View.GONE
-            },
-            onError = { e ->
-              Toast.makeText(this, "Error saving file :${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-              progressBar.visibility = View.GONE
-            }
-        )
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeBy(
+                    onSuccess = { file ->
+                      Toast.makeText(this, "$file saved", Toast.LENGTH_SHORT).show()
+                      progressBar.visibility = View.GONE
+                    },
+                    onError = { e ->
+                      Toast.makeText(this, "Error saving file :${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                      progressBar.visibility = View.GONE
+                    }
+            )
   }
 
   private fun updateUI(photos: List<Photo>) {
